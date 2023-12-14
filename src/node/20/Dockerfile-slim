@@ -1,0 +1,60 @@
+FROM node:20-bullseye-slim
+
+# Metadata
+LABEL maintainer="Asapdotid <asapdotid@gmail.com>"
+
+# Metadata params
+ARG TIMEZONE=Asia/Jakarta
+ARG DEBIAN_FRONTEND="noninteractive"
+ARG DEBCONF_NOWARNINGS="yes"
+ARG DEBCONF_TERSE="yes"
+ARG APT="apt-get -qq -y"
+ARG LANG="C.UTF-8"
+ENV NODE_ENV=production
+ENV TZ=${TIMEZONE}
+
+# Configure PNPM_HOME
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Enable PNPM
+RUN corepack enable && \
+    corepack prepare pnpm@latest --activate
+
+# Configure APT
+RUN echo "debconf debconf/frontend select ${DEBIAN_FRONTEND}" | debconf-set-selections \
+    && echo 'APT::Install-Recommends "false";' | tee /etc/apt/apt.conf.d/99install-recommends \
+    && echo 'APT::Get::Assume-Yes "true";' | tee /etc/apt/apt.conf.d/99assume-yes \
+    && sed -Ei 's|^(DPkg::Pre-Install-Pkgs .*)|#\1|g' /etc/apt/apt.conf.d/70debconf \
+    && debconf-show debconf
+
+# Install Packages
+RUN mv /etc/apt/apt.conf.d/70debconf . \
+    && ${APT} update \
+    && ${APT} install apt-utils >/dev/null \
+    && mv 70debconf /etc/apt/apt.conf.d \
+    && ${APT} upgrade >/dev/null \
+    && ${APT} install --no-install-recommends git wget curl autoconf libtool make automake autoconf g++ ca-certificates openssh-client >/dev/null \
+    && ${APT} install --no-install-recommends build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev libvips-tools >/dev/null
+
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
+
+RUN export GIT_SSL_NO_VERIFY=1 \
+    && git config --global http.sslVerify false
+
+RUN npm i -g npm@latest --prefix /usr/local
+RUN wget --progress=dot:giga -O - https://gobinaries.com/tj/node-prune | sh
+RUN pnpm add -g rimraf@latest --prefix /usr/local
+
+RUN npm cache clean --force \
+    && apt-get clean \
+    && apt-get -y --purge autoremove \
+    && rm -rf /usr/share/doc /usr/share/man /var/lib/apt/lists/* /root/* /tmp/* /var/tmp/*
+
+WORKDIR /app
+
+# Default command
+CMD [ "node", "--version" ]

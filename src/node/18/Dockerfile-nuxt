@@ -1,0 +1,37 @@
+FROM node:18-alpine
+
+# Metadata
+LABEL maintainer="Asapdotid <asapdotid@gmail.com>"
+
+# Metadata params
+ARG TIMEZONE=Asia/Jakarta
+ENV TZ=${TIMEZONE}
+ENV NODE_ENV=production
+
+# Configure PNPM_HOME
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+
+SHELL ["/bin/sh", "-o", "pipefail", "-c"]
+
+# Enable PNPM
+RUN corepack enable && \
+    corepack prepare pnpm@latest --activate
+
+RUN apk --no-cache --update add \
+    git make automake g++ curl autoconf libtool libpng-dev nasm tzdata >/dev/null
+
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone
+
+RUN npm i -g npm@latest --prefix /usr/local && \
+    pnpm add -g pm2@latest --prefix /usr/local && \
+    pnpm add -g nuxt-start@latest --prefix /usr/local
+
+RUN rm -rf /var/cache/apk/* && \
+    rm -rf /tmp/*
+
+WORKDIR /app
+
+# Default command
+CMD [ "node", "--version" ]
